@@ -80,7 +80,7 @@ The system can be customized by modifying:
 
 ## License
 
-Reserved
+Proprietary. All rights reserved
 
 ## Support
 
