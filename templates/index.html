@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tactical Cell Broadcast Command</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; display: flex; height: 100vh; background: #f4f4f9; }
+        #map { width: 60%; height: 100%; }
+        .sidebar { width: 40%; padding: 20px; background: #fff; box-shadow: -2px 0 5px rgba(0,0,0,0.1); overflow-y: auto; display: flex; flex-direction: column; }
+        h2 { margin-top: 0; color: #333; border-bottom: 2px solid #d32f2f; padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background: #d32f2f; color: white; border: none; padding: 15px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; width: 100%; margin-top: 10px; }
+        button:hover { background: #b71c1c; }
+        #xml-output { margin-top: 20px; background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; display: none; flex-grow: 1; }
+        .status { font-size: 12px; color: green; text-align: right; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="sidebar">
+        <div class="status" id="status">● System Online</div>
+        <h2>Alert Originator</h2>
+        <div class="form-group">
+            <label>Threat Category</label>
+            <select id="category">
+                <option>Armed Banditry</option>
+                <option>Kidnapping</option>
+                <option>Terrorist Movement</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Broadcast Language</label>
+            <select id="language">
+                <option value="en-US">English</option>
+                <option value="ha-NG">Hausa</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Alert Message</label>
+            <textarea id="message" rows="4" maxlength="360">Armed bandits spotted moving towards your location. Shelter in place immediately.</textarea>
+        </div>
+        <button onclick="sendAlert()">TRANSMIT CELL BROADCAST</button>
+        <div id="xml-output"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script>
+        const map = L.map('map').setView([12.0, 6.0], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        const drawControl = new L.Control.Draw({ draw: { marker: false, circlemarker: false, polyline: false }, edit: { featureGroup: drawnItems } });
+        map.addControl(drawControl);
+
+        let targetGeometry = null;
+        map.on(L.Draw.Event.CREATED, function (e) {
+            drawnItems.clearLayers();
+            drawnItems.addLayer(e.layer);
+            targetGeometry = e.layer;
+        });
+
+        async function sendAlert() {
+            if (!targetGeometry) { alert("Draw a geo-fence on the map first!"); return; }
+            
+            let payload = {
+                category: document.getElementById('category').value,
+                language: document.getElementById('language').value,
+                message: document.getElementById('message').value,
+                type: targetGeometry instanceof L.Circle ? 'circle' : 'polygon',
+                areaDesc: "Target Zone"
+            };
+
+            if (payload.type === 'circle') {
+                let ll = targetGeometry.getLatLng();
+                payload.coords = `${ll.lat},${ll.lng} ${targetGeometry.getRadius()}`;
+            } else {
+                let ll = targetGeometry.getLatLngs()[0];
+                payload.coords = ll.map(p => `${p.lat},${p.lng}`).join(' ');
+            }
+
+            document.getElementById('status').innerText = "● Transmitting...";
+            document.getElementById('status').style.color = "red";
+
+            // Send via standard HTTP POST
+            const response = await fetch('/send_alert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            
+            document.getElementById('xml-output').style.display = 'block';
+            document.getElementById('xml-output').innerText = data.xml;
+            document.getElementById('status').innerText = "● Broadcast Sent to Telecom Gateway";
+            document.getElementById('status').style.color = "green";
+        }
+    </script>
+</body>
+</html>
